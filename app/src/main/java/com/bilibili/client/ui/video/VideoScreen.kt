@@ -14,8 +14,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.bilibili.client.ui.components.EmptyState
 import com.bilibili.client.ui.components.ErrorView
 import com.bilibili.client.ui.components.LoadingIndicator
+import com.bilibili.client.ui.video.components.VideoPlayer
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -27,14 +29,17 @@ fun VideoScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
+    // Allow viewModel to load video when bvid changes
     LaunchedEffect(bvid) {
-        viewModel.loadVideo(bvid)
+        if (uiState.videoInfo?.bvid != bvid) {
+            viewModel.loadVideo(bvid)
+        }
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(uiState.videoInfo?.title?.take(20) ?: "视频") },
+                title = { Text(uiState.videoInfo?.title?.take(30) ?: "视频") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
@@ -55,30 +60,22 @@ fun VideoScreen(
                         .fillMaxSize()
                         .padding(padding)
                 ) {
-                    // Video Player
+                    // Video Player with Danmaku
                     item {
-                        Surface(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(220.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Icon(
-                                        Icons.Default.PlayArrow,
-                                        contentDescription = "播放",
-                                        modifier = Modifier.size(48.dp),
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Text(
-                                        "视频播放器",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                        }
+                        VideoPlayer(
+                            player = viewModel.biliPlayer,
+                            danmakuEngine = viewModel.danmakuEngine,
+                            playerPositionMs = uiState.playerPositionMs,
+                            showDanmaku = true
+                        )
+                    }
+
+                    // Player controls
+                    item {
+                        PlayerActionBar(
+                            isPlaying = viewModel.biliPlayer.state.value.isPlaying,
+                            onPlayPause = { viewModel.togglePlayPause() }
+                        )
                     }
 
                     // Video Info
@@ -99,7 +96,7 @@ fun VideoScreen(
 
                             Spacer(modifier = Modifier.height(8.dp))
 
-                            // Action buttons
+                            // Stats row
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceEvenly
@@ -122,7 +119,23 @@ fun VideoScreen(
                         }
                     }
 
-                    // Comments
+                    // Related videos
+                    if (uiState.relatedVideos.isNotEmpty()) {
+                        item {
+                            HorizontalDivider()
+                            Text(
+                                text = "相关推荐",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(16.dp)
+                            )
+                        }
+                        items(uiState.relatedVideos.take(5)) { video ->
+                            RelatedVideoItem(video)
+                        }
+                    }
+
+                    // Comments section
                     item {
                         HorizontalDivider()
                         Text(
@@ -135,7 +148,7 @@ fun VideoScreen(
 
                     if (uiState.comments.isEmpty()) {
                         item {
-                            com.bilibili.client.ui.components.EmptyState(
+                            EmptyState(
                                 message = "暂无评论",
                                 modifier = Modifier.padding(32.dp)
                             )
@@ -152,6 +165,28 @@ fun VideoScreen(
 }
 
 @Composable
+private fun PlayerActionBar(
+    isPlaying: Boolean,
+    onPlayPause: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        IconButton(onClick = onPlayPause) {
+            Icon(
+                imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                contentDescription = if (isPlaying) "暂停" else "播放",
+                modifier = Modifier.size(32.dp)
+            )
+        }
+    }
+}
+
+@Composable
 private fun ActionButton(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         IconButton(onClick = { }) {
@@ -162,7 +197,7 @@ private fun ActionButton(icon: androidx.compose.ui.graphics.vector.ImageVector, 
 }
 
 @Composable
-private fun CommentItem(comment: Comment) {
+private fun CommentItem(comment: CommentItem) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -196,6 +231,51 @@ private fun CommentItem(comment: Comment) {
                 text = comment.content,
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(top = 4.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun RelatedVideoItem(video: com.bilibili.client.ui.home.VideoItem) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp)
+    ) {
+        Surface(
+            modifier = Modifier
+                .width(120.dp)
+                .height(68.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            shape = MaterialTheme.shapes.small
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Text(
+                    text = video.duration,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = video.title,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = video.uploader,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = "${video.views} 次观看",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }

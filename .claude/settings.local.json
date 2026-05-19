@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cp /c/Users/admin/.gradle/wrapper/dists/gradle-8.14-all/*/gradle-8.14/lib/gradle-wrapper-*.jar gradle/wrapper/gradle-wrapper.jar)",
+      "Bash(cp /c/Users/admin/.gradle/wrapper/dists/gradle-8.10.2-bin/*/gradle-8.10.2/lib/gradle-wrapper-*.jar gradle/wrapper/gradle-wrapper.jar)"
+    ]
+  }
+}

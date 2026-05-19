@@ -1,11 +1,14 @@
 package com.bilibili.client.di
 
+import android.content.Context
+import androidx.room.Room
 import com.bilibili.client.data.local.BiliDatabase
 import com.bilibili.client.data.local.dao.CacheDao
 import com.bilibili.client.data.local.dao.DownloadDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
@@ -16,10 +19,14 @@ object DatabaseModule {
     @Provides
     @Singleton
     fun provideDatabase(
-        // context: Context
+        @ApplicationContext context: Context
     ): BiliDatabase {
-        // TODO: Room.databaseBuilder(context, BiliDatabase::class.java, "bilibili.db").build()
-        throw NotImplementedError("Room database not yet initialized")
+        return Room.databaseBuilder(
+            context,
+            BiliDatabase::class.java,
+            "bilibili.db"
+        ).fallbackToDestructiveMigration()
+            .build()
     }
 
     @Provides

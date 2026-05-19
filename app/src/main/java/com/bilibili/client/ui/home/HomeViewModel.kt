@@ -2,6 +2,9 @@ package com.bilibili.client.ui.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.bilibili.client.domain.repository.AuthRepository
+import com.bilibili.client.domain.repository.LiveRepository
+import com.bilibili.client.domain.repository.VideoRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -15,7 +18,8 @@ data class VideoItem(
     val cover: String,
     val uploader: String,
     val views: String,
-    val duration: String
+    val duration: String,
+    val uploaderAvatar: String = ""
 )
 
 data class LiveRoomItem(
@@ -24,7 +28,8 @@ data class LiveRoomItem(
     val cover: String,
     val uploader: String,
     val viewerCount: String,
-    val isLiving: Boolean = true
+    val isLiving: Boolean = true,
+    val uploaderAvatar: String = ""
 )
 
 data class HomeUiState(
@@ -36,7 +41,11 @@ data class HomeUiState(
 )
 
 @HiltViewModel
-class HomeViewModel @Inject constructor() : ViewModel() {
+class HomeViewModel @Inject constructor(
+    private val videoRepository: VideoRepository,
+    private val liveRepository: LiveRepository,
+    private val authRepository: AuthRepository
+) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
@@ -46,6 +55,7 @@ class HomeViewModel @Inject constructor() : ViewModel() {
 
     init {
         loadData()
+        checkLoginStatus()
     }
 
     fun refresh() {
@@ -53,24 +63,46 @@ class HomeViewModel @Inject constructor() : ViewModel() {
         loadData()
     }
 
+    private fun checkLoginStatus() {
+        viewModelScope.launch {
+            _isLoggedIn.value = authRepository.isLoggedIn()
+        }
+    }
+
     private fun loadData() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             try {
-                // TODO: Call Bilibili API
-                // - GET https://api.bilibili.com/x/web-interface/popular (热门)
-                // - GET https://api.live.bilibili.com/room/v1/Area/getList (直播分区)
-                val mockVideos = listOf(
-                    VideoItem("BV1xx411c7mD", "示例视频标题", "", "UP主1", "10万", "5:30"),
-                    VideoItem("BV1xx411c7mE", "另一个视频", "", "UP主2", "5万", "3:15"),
-                )
-                val mockLives = listOf(
-                    LiveRoomItem(1L, "直播间1", "", "主播1", "1000"),
-                    LiveRoomItem(2L, "直播间2", "", "主播2", "500"),
-                )
+                val hotResult = videoRepository.getHotVideos()
+                val liveResult = liveRepository.getLiveRooms()
+
+                val hotVideos = hotResult.getOrNull()?.map { video ->
+                    VideoItem(
+                        bvid = video.bvid,
+                        title = video.title,
+                        cover = video.coverUrl,
+                        uploader = video.uploader,
+                        views = formatCount(video.views),
+                        duration = video.duration,
+                        uploaderAvatar = video.uploaderAvatar
+                    )
+                } ?: emptyList()
+
+                val liveRooms = liveResult.getOrNull()?.map { room ->
+                    LiveRoomItem(
+                        roomId = room.roomId,
+                        title = room.title,
+                        cover = room.coverUrl,
+                        uploader = room.uploader,
+                        viewerCount = formatCount(room.viewerCount),
+                        isLiving = room.isLive,
+                        uploaderAvatar = room.uploaderAvatar
+                    )
+                } ?: emptyList()
+
                 _uiState.value = HomeUiState(
-                    hotVideos = mockVideos,
-                    liveRooms = mockLives,
+                    hotVideos = hotVideos,
+                    liveRooms = liveRooms,
                     isRefreshing = false
                 )
             } catch (e: Exception) {
@@ -80,6 +112,14 @@ class HomeViewModel @Inject constructor() : ViewModel() {
                     error = e.message
                 )
             }
+        }
+    }
+
+    companion object {
+        fun formatCount(count: Long): String = when {
+            count >= 10000 -> "${count / 10000}万"
+            count >= 1000 -> "${count / 1000}千"
+            else -> count.toString()
         }
     }
 }

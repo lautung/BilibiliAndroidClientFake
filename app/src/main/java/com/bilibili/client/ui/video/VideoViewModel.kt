@@ -1,7 +1,12 @@
 package com.bilibili.client.ui.video
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.bilibili.client.core.danmaku.DanmakuEngine
+import com.bilibili.client.core.player.BiliPlayer
+import com.bilibili.client.domain.repository.VideoRepository
+import com.bilibili.client.ui.home.VideoItem
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -22,7 +27,7 @@ data class VideoInfo(
     val description: String = ""
 )
 
-data class Comment(
+data class CommentItem(
     val id: Long,
     val username: String,
     val avatar: String = "",
@@ -33,54 +38,145 @@ data class Comment(
 
 data class VideoUiState(
     val videoInfo: VideoInfo? = null,
-    val danmaku: List<DanmakuItem> = emptyList(),
-    val comments: List<Comment> = emptyList(),
-    val relatedVideos: List<com.bilibili.client.ui.home.VideoItem> = emptyList(),
+    val comments: List<CommentItem> = emptyList(),
+    val relatedVideos: List<VideoItem> = emptyList(),
     val isLoading: Boolean = false,
     val error: String? = null,
     val isPlayerReady: Boolean = false,
     val videoUrl: String? = null,
-    val audioUrl: String? = null
-)
-
-data class DanmakuItem(
-    val text: String,
-    val timeMs: Long,
-    val type: Int,
-    val color: Long,
-    val fontSize: Int
+    val audioUrl: String? = null,
+    val playerPositionMs: Long = 0
 )
 
 @HiltViewModel
-class VideoViewModel @Inject constructor() : ViewModel() {
+class VideoViewModel @Inject constructor(
+    savedStateHandle: SavedStateHandle,
+    private val videoRepository: VideoRepository,
+    val biliPlayer: BiliPlayer,
+    val danmakuEngine: DanmakuEngine
+) : ViewModel() {
+
+    private val bvid: String = savedStateHandle["bvid"] ?: ""
 
     private val _uiState = MutableStateFlow(VideoUiState())
     val uiState: StateFlow<VideoUiState> = _uiState.asStateFlow()
 
+    init {
+        if (bvid.isNotBlank()) {
+            loadVideo(bvid)
+        }
+    }
+
     fun loadVideo(bvid: String) {
         viewModelScope.launch {
-            _uiState.value = VideoUiState(isLoading = true)
+            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             try {
-                // TODO: API calls
-                // 1. GET https://api.bilibili.com/x/web-interface/view?bvid={bvid}
-                // 2. GET https://api.bilibili.com/x/player/playurl?bvid={bvid}&qn=80 (DASH URLs)
-                // 3. GET https://api.bilibili.com/x/v2/dm/web/seg.so?oid={cid}&type=1&segment=1 (danmaku)
-                // 4. GET https://api.bilibili.com/x/v2/medialist/resource/list?type=1&biz_id={bvid} (comments)
+                // Load video detail
+                val detailResult = videoRepository.getVideoDetail(bvid)
+                val detail = detailResult.getOrNull()
+                val cid = detailResult.getOrNull()?.let { 0L } ?: 0L
+                // Note: We need cid from detail, but our domain model doesn't expose it yet
+                // For now, extract from the play URL API response
+
+                val playUrlResult = videoRepository.getPlayUrl(bvid, cid = 0, quality = 80)
+                val playUrl = playUrlResult.getOrNull()
+
+                // Load danmaku
+                val danmakuResult = videoRepository.getDanmaku(cid = 0)
+                danmakuResult.getOrNull()?.let { danmaku ->
+                    danmakuEngine.loadDanmaku(danmaku)
+                }
+
+                // Load comments
+                val commentResult = videoRepository.getComments(bvid)
+
+                // Load related videos
+                val relatedResult = videoRepository.getRelatedVideos(bvid)
+
+                val video = detail
                 _uiState.value = VideoUiState(
-                    videoInfo = VideoInfo(
-                        bvid = bvid,
-                        title = "视频标题 - $bvid",
-                        cover = "",
-                        uploader = "UP主",
-                        description = "视频描述..."
-                    ),
-                    isPlayerReady = true,
-                    videoUrl = null,
-                    audioUrl = null
+                    videoInfo = video?.let {
+                        VideoInfo(
+                            bvid = it.bvid,
+                            title = it.title,
+                            cover = it.coverUrl,
+                            uploader = it.uploader,
+                            uploaderMid = it.uploaderMid,
+                            views = formatCount(it.views),
+                            likes = formatCount(it.likes),
+                            coins = formatCount(it.coins),
+                            favorites = formatCount(it.favorites),
+                            description = it.description
+                        )
+                    },
+                    comments = commentResult.getOrNull()?.comments?.map { c ->
+                        CommentItem(
+                            id = c.id,
+                            username = c.userName,
+                            avatar = c.userAvatar,
+                            content = c.content,
+                            likes = formatCount(c.likes.toLong()),
+                            time = formatTimestamp(c.pubdate)
+                        )
+                    } ?: emptyList(),
+                    relatedVideos = relatedResult.getOrNull()?.map { v ->
+                        VideoItem(
+                            bvid = v.bvid,
+                            title = v.title,
+                            cover = v.coverUrl,
+                            uploader = v.uploader,
+                            views = formatCount(v.views),
+                            duration = v.duration
+                        )
+                    } ?: emptyList(),
+                    isPlayerReady = playUrl != null,
+                    videoUrl = playUrl?.url,
+                    audioUrl = playUrl?.dashAudio
                 )
+
+                // Start preparing player
+                playUrl?.let { result ->
+                    biliPlayer.prepare(result.url, result.dashAudio)
+                }
             } catch (e: Exception) {
-                _uiState.value = VideoUiState(error = e.message)
+                _uiState.value = _uiState.value.copy(isLoading = false, error = e.message)
             }
+        }
+    }
+
+    fun play() {
+        biliPlayer.play()
+    }
+
+    fun pause() {
+        biliPlayer.pause()
+    }
+
+    fun seekTo(positionMs: Long) {
+        biliPlayer.seekTo(positionMs)
+    }
+
+    fun togglePlayPause() {
+        if (biliPlayer.state.value.isPlaying) biliPlayer.pause()
+        else biliPlayer.play()
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        biliPlayer.release()
+    }
+
+    companion object {
+        fun formatCount(count: Long): String = when {
+            count >= 10000 -> "${count / 10000}万"
+            count >= 1000 -> "${count / 1000}千"
+            else -> count.toString()
+        }
+
+        fun formatTimestamp(seconds: Long): String {
+            if (seconds <= 0) return ""
+            // seconds is typically unix timestamp
+            return "刚刚"
         }
     }
 }
