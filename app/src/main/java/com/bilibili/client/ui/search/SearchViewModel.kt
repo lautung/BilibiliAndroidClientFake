@@ -2,6 +2,7 @@ package com.bilibili.client.ui.search
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.bilibili.client.domain.repository.SearchRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -30,7 +31,9 @@ data class SearchUiState(
 )
 
 @HiltViewModel
-class SearchViewModel @Inject constructor() : ViewModel() {
+class SearchViewModel @Inject constructor(
+    private val searchRepository: SearchRepository
+) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SearchUiState())
     val uiState: StateFlow<SearchUiState> = _uiState.asStateFlow()
@@ -43,8 +46,10 @@ class SearchViewModel @Inject constructor() : ViewModel() {
         if (query.length >= 2) {
             searchJob = viewModelScope.launch {
                 delay(300) // debounce
-                // TODO: GET https://api.bilibili.com/x/web-interface/search/default/suggest?term={query}
-                _uiState.value = _uiState.value.copy(suggestions = listOf("建议1", "建议2"))
+                searchRepository.getSuggestions(query)
+                    .onSuccess { suggestions ->
+                        _uiState.value = _uiState.value.copy(suggestions = suggestions)
+                    }
             }
         } else {
             _uiState.value = _uiState.value.copy(suggestions = emptyList())
@@ -57,21 +62,37 @@ class SearchViewModel @Inject constructor() : ViewModel() {
 
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isSearching = true, error = null)
-            try {
-                // TODO: GET https://api.bilibili.com/x/web-interface/search/type?search_type=video&keyword={query}
-                _uiState.value = _uiState.value.copy(
-                    results = listOf(
-                        SearchResult("BV1xx411c7mD", "搜索结果1 - $query", "", "UP主", "10万", "5:30")
-                    ),
-                    isSearching = false,
-                    suggestions = emptyList()
-                )
-            } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(
-                    isSearching = false,
-                    error = e.message
-                )
-            }
+            searchRepository.searchVideos(query)
+                .onSuccess { result ->
+                    _uiState.value = _uiState.value.copy(
+                        results = result.videos.map { item ->
+                            SearchResult(
+                                bvid = item.bvid,
+                                title = item.title,
+                                cover = item.coverUrl,
+                                uploader = item.uploader,
+                                views = formatCount(item.views),
+                                duration = item.duration
+                            )
+                        },
+                        isSearching = false,
+                        suggestions = emptyList()
+                    )
+                }
+                .onFailure { e ->
+                    _uiState.value = _uiState.value.copy(
+                        isSearching = false,
+                        error = e.message
+                    )
+                }
+        }
+    }
+
+    companion object {
+        fun formatCount(count: Long): String = when {
+            count >= 10000 -> "${count / 10000}万"
+            count >= 1000 -> "${count / 1000}千"
+            else -> count.toString()
         }
     }
 }

@@ -28,10 +28,6 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideAuthInterceptor(): AuthInterceptor = AuthInterceptor()
-
-    @Provides
-    @Singleton
     fun provideWbiSignInterceptor(): WbiSignInterceptor = WbiSignInterceptor()
 
     @Provides

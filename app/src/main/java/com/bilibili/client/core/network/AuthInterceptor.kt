@@ -1,16 +1,31 @@
 package com.bilibili.client.core.network
 
+import com.bilibili.client.data.local.SettingsStore
+import kotlinx.coroutines.runBlocking
 import okhttp3.Interceptor
 import okhttp3.Response
+import javax.inject.Inject
+import javax.inject.Singleton
 
 /**
- * Interceptor that injects Bilibili cookies (SESSDATA) into API requests.
- * Cookies are stored securely via EncryptedSharedPreferences.
+ * Injects Bilibili cookies (SESSDATA, bili_jct) into API requests
+ * and captures new cookies from login responses.
  */
-class AuthInterceptor : Interceptor {
+@Singleton
+class AuthInterceptor @Inject constructor(
+    private val settingsStore: SettingsStore
+) : Interceptor {
 
     private var sessdata: String? = null
     private var biliJct: String? = null
+
+    init {
+        // Load stored session on creation
+        runBlocking {
+            sessdata = settingsStore.getSessdata()
+            biliJct = settingsStore.getBiliJct()
+        }
+    }
 
     fun setSession(sessdata: String, biliJct: String) {
         this.sessdata = sessdata
@@ -20,21 +35,55 @@ class AuthInterceptor : Interceptor {
     fun clearSession() {
         sessdata = null
         biliJct = null
+        runBlocking { settingsStore.clearAuth() }
     }
 
-    val isLoggedIn: Boolean get() = sessdata != null
+    val isLoggedIn: Boolean get() = !sessdata.isNullOrEmpty()
 
     override fun intercept(chain: Interceptor.Chain): Response {
         val originalRequest = chain.request()
-
-        if (sessdata == null) return chain.proceed(originalRequest)
-
-        val request = originalRequest.newBuilder()
-            .header("Cookie", "SESSDATA=$sessdata; bili_jct=$biliJct")
+        val requestBuilder = originalRequest.newBuilder()
             .header("Referer", "https://www.bilibili.com")
-            .header("User-Agent", "Mozilla/5.0 BiliClient/1.0")
-            .build()
+            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
 
-        return chain.proceed(request)
+        // Inject cookies if available
+        if (!sessdata.isNullOrEmpty()) {
+            requestBuilder.header("Cookie", "SESSDATA=$sessdata; bili_jct=$biliJct")
+        }
+
+        val response = chain.proceed(requestBuilder.build())
+
+        // Capture Set-Cookie headers from response (login flow)
+        val setCookieHeaders = response.headers("Set-Cookie")
+        for (header in setCookieHeaders) {
+            when {
+                header.startsWith("SESSDATA=") -> {
+                    val value = extractCookieValue(header)
+                    if (value != null) {
+                        sessdata = value
+                        runBlocking { settingsStore.saveSession(sessdata = value, biliJct = biliJct ?: "", userId = "") }
+                    }
+                }
+                header.startsWith("bili_jct=") -> {
+                    val value = extractCookieValue(header)
+                    if (value != null) {
+                        biliJct = value
+                        if (sessdata != null) {
+                            runBlocking { settingsStore.saveSession(sessdata = sessdata!!, biliJct = value, userId = "") }
+                        }
+                    }
+                }
+            }
+        }
+
+        return response
+    }
+
+    private fun extractCookieValue(setCookieHeader: String): String? {
+        // Format: "SESSDATA=value; Path=/; Domain=.bilibili.com; HttpOnly"
+        val parts = setCookieHeader.split(";")
+        val first = parts.firstOrNull() ?: return null
+        val eq = first.indexOf('=')
+        return if (eq > 0) first.substring(eq + 1) else null
     }
 }

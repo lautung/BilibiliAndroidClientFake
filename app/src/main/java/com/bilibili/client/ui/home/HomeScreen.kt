@@ -189,20 +189,31 @@ private fun VideoCard(
                 .fillMaxWidth()
                 .padding(8.dp)
         ) {
-            // Cover image placeholder
-            Surface(
-                modifier = Modifier
-                    .width(120.dp)
-                    .height(68.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                shape = MaterialTheme.shapes.small
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(
-                        text = video.duration,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+            // Cover image
+            if (video.cover.isNotEmpty()) {
+                AsyncImage(
+                    model = video.cover,
+                    contentDescription = video.title,
+                    modifier = Modifier
+                        .width(120.dp)
+                        .height(68.dp),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Surface(
+                    modifier = Modifier
+                        .width(120.dp)
+                        .height(68.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    shape = MaterialTheme.shapes.small
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(
+                            text = video.duration,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
 
