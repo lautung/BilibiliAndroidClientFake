@@ -62,5 +62,21 @@ Single-activity (`MainActivity.kt`) with Navigation Compose. Routes defined as s
 
 - **Windows 10**, JDK 21 at `C:\Program Files\Eclipse Adoptium\jdk-21.0.10.7-hotspot`
 - Android SDK at `D:\Android\SDK`
+- Android CLI v0.7.15433128 — `android sdk`, `android run`, `android emulator`, `android docs`
 - `gradlew.bat` hardcodes JAVA_HOME to work around system JAVA_HOME pointing at Android Studio's JBR
 - `gradle/wrapper/gradle-wrapper.properties` points to `gradle-9.4.1-bin.zip`
+
+## Android Skills
+
+This project has Android development skills installed in `skills/`. Use `Skill` tool when relevant. Key skills:
+
+- **`agp-9-upgrade`** — AGP 9 migration (already applied; use for future AGP upgrades)
+- **`android-cli`** — SDK management, emulator, APK deployment, layout inspection
+- **`edge-to-edge`** — Edge-to-edge display configuration
+- **`navigation-3`** — Navigation Compose type-safe patterns
+- **`testing-setup`** — Test infrastructure setup
+- **`migrate-xml-views-to-jetpack-compose`** — View-to-Compose migration
+- **`perfetto-trace-analysis`** — Performance trace analysis
+- **`r8-analyzer`** — R8/ProGuard analysis
+
+Full list: `android skills list` or check `skills/` directory.
