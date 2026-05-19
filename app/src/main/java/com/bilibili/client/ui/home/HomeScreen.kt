@@ -11,8 +11,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
@@ -70,10 +72,22 @@ fun HomeScreen(
         bottomBar = {
             NavigationBar {
                 NavigationBarItem(
-                    selected = true,
-                    onClick = { },
-                    icon = { Icon(Icons.Default.Person, contentDescription = null) },
+                    selected = selectedTabIndex == 0,
+                    onClick = { selectedTabIndex = 0 },
+                    icon = { Icon(Icons.Default.Home, contentDescription = null) },
                     label = { Text("首页") }
+                )
+                NavigationBarItem(
+                    selected = false,
+                    onClick = onNavigateToSearch,
+                    icon = { Icon(Icons.Default.Search, contentDescription = null) },
+                    label = { Text("搜索") }
+                )
+                NavigationBarItem(
+                    selected = false,
+                    onClick = onNavigateToDownloads,
+                    icon = { Icon(Icons.Default.Download, contentDescription = null) },
+                    label = { Text("下载") }
                 )
             }
         }

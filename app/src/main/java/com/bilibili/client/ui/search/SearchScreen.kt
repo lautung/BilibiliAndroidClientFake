@@ -4,6 +4,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
@@ -12,6 +14,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.bilibili.client.ui.components.EmptyState
@@ -34,16 +37,23 @@ fun SearchScreen(
                     TextField(
                         value = uiState.query,
                         onValueChange = { viewModel.onQueryChanged(it) },
-                        placeholder = { Text("搜索") },
+                        placeholder = { Text("搜索视频") },
                         singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        keyboardActions = KeyboardActions(onSearch = { viewModel.search() }),
                         colors = TextFieldDefaults.colors(
                             unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
                             focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant
                         ),
                         trailingIcon = {
-                            if (uiState.query.isNotEmpty()) {
-                                IconButton(onClick = { viewModel.onQueryChanged("") }) {
-                                    Icon(Icons.Default.Clear, "清除")
+                            Row {
+                                if (uiState.query.isNotEmpty()) {
+                                    IconButton(onClick = { viewModel.onQueryChanged("") }) {
+                                        Icon(Icons.Default.Clear, "清除")
+                                    }
+                                }
+                                IconButton(onClick = { viewModel.search() }) {
+                                    Icon(Icons.Default.Search, "搜索")
                                 }
                             }
                         },
